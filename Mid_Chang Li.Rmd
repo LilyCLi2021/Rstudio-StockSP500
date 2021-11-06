@@ -1,0 +1,322 @@
+---
+title: "How was your stock return in 2017?"
+author: "Chang Li"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Load libraries
+library(tidyverse)
+
+library(moments)
+
+
+```
+
+# Introduction
+
+The S&P 500 (Standard & Poor's 500 Index), is a stock index that measures the stock performance of the 500 largest companies listed in the U.S. stock market. It is a float-weighted index, meaning company market capitalization are adjusted by the number of shares available for public trading. The index is widely considered to be the best indicator of large U.S. stocks. Therefore, there are many funds designed to track the performance of S&P. The S&P I am working with is operated by S&P Down Jones Indices.
+
+So, the analysis will be guided by there questions:
+
+1. How did the stock market perform in 2017?
+2. How each sector performed in 2017?
+3. Zoom into one sector, how each month of the sector performed in 2017? 
+
+The sector of each company is classified by the Global Industry Classification Standard (GICS). GICS is an industry taxonomy developed in 1999 by Morgan Stanley Capital International (MSCI) and Standard & Poor's (S&P) for use by the global financial community. Each stock will be defined into 11 economic sectors and further divided into 24 industry groups, then into 68 industries, and finally into 157 sub-industries.
+
+
+```{r}
+
+# Load data and assign object
+# Mutate the data set in order to calculate the averages of each stock per month
+
+ sp500 <- read_csv("./data/s&p500 2017.csv") %>%
+  mutate(date.formatted = as.Date(date, format = "%m/%d/%y"),
+         month.number = format(date.formatted, format = "%m"),
+         month.name = format(date.formatted, format = "%B"))
+
+```
+
+# How did the stock market perform in 2017?
+
+First of all, I am going analyze the overall market of 2017. Instead of calculating the total annual return, I will focus on the average of daily gain (%) of each stock.
+
+```{r}
+
+# Grouping data by stock names and sectors to get the average day gain(%) of 2017
+
+year.500 <- 
+    sp500 %>% group_by(Name, `GICS Sector`) %>%
+    summarize(avg.gain = mean(`day gain%`, na.rm = TRUE))
+
+# Calculating the central tendency of the daily gain(%) in 2017
+
+mean.500 <- mean(year.500$avg.gain, na.rm = TRUE)
+median.500 <- median(year.500$avg.gain, na.rm = TRUE)
+summary(year.500$avg.gain, na.rm = TRUE)
+
+
+# Plot the distribution of S&P500 average daily gain(%) in 2017
+
+ggplot(year.500, mapping = aes(avg.gain))+
+  geom_histogram(binwidth = 0.01, fill = "#6ba292", color = "white", alpha = 0.8)+
+  labs(x = "Yearly Day Gain (%)", y = "Count", title = "2017 S&P 500 Percentage Yearly Day Gain")
+
+# Checking the normality of the distribution
+
+skewness(year.500$avg.gain, na.rm = TRUE)
+kurtosis(year.500$avg.gain, na.rm = TRUE)
+
+```
+
+Based on the calculation, the mean of S&P500 daily gain(%) is 0.0214% which is a positive number, so that the stock market was positively gaining in 2017. 
+
+The distribution of S&P500 daily gain(%) is not normally distributed. First of all, the visual shape does not look symmetrical. The graph leaning towards the right. Second of all, based on the statistics, the mean (0.0214%) is not equal to the median (0.0289%). Lastly, the skewness (-1.913) is less than 0, the kurtosis (15.626) is much greater than 3. Therefore, the distribution is leptokurtic and negatively skewed.
+
+
+# How each sector perform in 2017?
+
+### Distribution of sectors each quarter in 2017
+
+There are 11 sectors classified by the GICS: Information Technology, Health Care, Financials, Consumer Discretionary, Communication Services, Industrials, Consumer Staples, Energy, Utilities, Real Estate, and Materials. I will be looking at the mean percentage daily gain of each quarter throughout 2017. 
+
+```{r}
+
+# Grouping data only by sectors
+
+avg.sector <- 
+    sp500 %>% group_by(`GICS Sector`) %>%
+    summarize(avg.gain = mean(`day gain%`, na.rm = TRUE))
+
+# Filtering data from Q1-4
+
+Q1 <- filter(sp500, month.name %in% c("January", "February", "March")) %>% 
+  group_by(`GICS Sector`)  %>%
+  summarize(avg.gain = mean(`day gain%`, na.rm = TRUE)) %>%
+  mutate(Q = "Q1")
+
+Q2 <- filter(sp500, month.name %in% c("April", "May", "June")) %>% 
+  group_by(`GICS Sector`)  %>%
+  summarize(avg.gain = mean(`day gain%`, na.rm = TRUE)) %>%
+  mutate(Q= "Q2")
+
+Q3 <- filter(sp500, month.name %in% c("July", "August", "September")) %>% 
+  group_by(`GICS Sector`)  %>%
+  summarize(avg.gain = mean(`day gain%`, na.rm = TRUE)) %>%
+  mutate(Q = "Q3")
+
+Q4 <- filter(sp500, month.name %in% c("October", "November", "December")) %>% 
+  group_by(`GICS Sector`)  %>%
+  summarize(avg.gain = mean(`day gain%`, na.rm = TRUE)) %>%
+  mutate(Q = "Q4")
+
+# Combining data
+
+quarter <- bind_rows(Q1, Q2, Q3, Q4)
+
+# Calculating the central tendency of each quarter
+
+summary(Q1$avg.gain, na.rm = TRUE)
+summary(Q2$avg.gain, na.rm = TRUE)
+summary(Q3$avg.gain, na.rm = TRUE)
+summary(Q4$avg.gain, na.rm = TRUE)
+
+# Ploting the distribution of sectors' performance in quarters
+
+ggplot(data = quarter, mapping = aes(x = avg.gain, y = `GICS Sector`, color = Q))+
+  geom_point()+
+  geom_line(color = "gray55") +
+  scale_color_manual(values=c('#8dd6c1','#6ba292', '#4a7065', '#283d37'))
+
+
+```
+
+According to the distribution and the statistics, the average daily gain (%) for Q1 performed the best in most of the sectors, only the energy sector had a significant negative value (-0.1597%). Q2 didn't perform too well compared to Q1 in all sectors. Q3 and Q4 performed well on average, all number fell in the range between -0.0053% and 0.0076%.
+
+### T-score and t-probability for selected sectors
+
+I am looking at the average daily gain(%) S&P500 as a sampling distribution. The sector is the sample group. The S&P500 is the population. I have selected three interesting sectors to compute the t-score and t-probability for the sector mean of the average daily gain(%) value, relative to the population mean of average daily gain(%).
+
+  * Utilities
+  * Energy
+  * Communication Services
+
+What is the probability of randomly selecting a sample of stocks that would have a mean average daily gain(%) equal to or greater than the mean average daily gain(%) of the sector?
+
+```{r}
+
+# Calculating t-score and t-probability for Utilities
+
+Utili <- filter(sp500, `GICS Sector` == "Utilities") %>% 
+  group_by(Name)  %>%
+  summarize(avg.gain = mean(`day gain%`, na.rm = TRUE))
+
+mean.utili <- mean(Utili$avg.gain, na.rm = TRUE)
+sd.utili <- sd(Utili$avg.gain, na.rm = TRUE)
+size.utili <- nrow(Utili)
+
+se.utili <- sd.utili / sqrt(size.utili)
+
+t.utili <- (mean.utili - mean.500) / se.utili
+
+pt(q = t.utili, df = size.utili - 1, lower.tail = FALSE)
+
+# Calculating t-score and t-probability for Energy
+
+Energy <- filter(sp500, `GICS Sector` == "Energy") %>% 
+  group_by(Name)  %>%
+  summarize(avg.gain = mean(`day gain%`, na.rm = TRUE))
+
+mean.energy <- mean(Energy$avg.gain, na.rm = TRUE)
+sd.energy <- sd(Energy$avg.gain, na.rm = TRUE)
+size.energy <- nrow(Energy)
+
+se.energy <- sd.energy / sqrt(size.energy)
+
+t.energy <- (mean.energy - mean.500) / se.energy
+
+pt(q = t.energy, df = size.energy - 1, lower.tail = FALSE)
+
+# Calculating t-score and t-probability for Communication Services
+
+Comm <- filter(sp500, `GICS Sector` == "Communication Services") %>% 
+  group_by(Name)  %>%
+  summarize(avg.gain = mean(`day gain%`, na.rm = TRUE))
+
+mean.comm <- mean(Comm$avg.gain, na.rm = TRUE)
+sd.comm <- sd(Comm$avg.gain, na.rm = TRUE)
+size.comm <- nrow(Comm)
+
+se.comm <- sd.comm / sqrt(size.comm)
+
+t.comm <- (mean.comm - mean.500) / se.comm
+
+pt(q = t.comm, df = size.comm - 1, lower.tail = FALSE)
+
+```
+
+For the utilities sector, the computed t-probability of observing the mean average daily gain(%) value seen in our sample or greater was 0.15% (the likelihood of seeing a sample with a mean of utilities or less is almost 1.)
+For the energy sector, the computed t-probability of observing the mean average daily gain(%) value seen in our sample or greater was 99.99% (the likelihood of seeing a sample with a mean of energy or less is almost 0.)
+For the communication services sector, the computed t-probability of observing the mean average daily gain(%) value seen in our sample or greater was 60.1%.
+
+Neither utilities and energy are typical in terms of the mean average daily gain(%). The mean of utilities is too high and the mean of energy is too low. Only the communication services group is the most typical in the three sample group. If I randomly sample some stocks from the population, about 60% of the time, the sample mean average daily gain(%) will be equal to or greater than mean of communication services. The remaining 40% of the time, the sample mean will be less than the mean of communication services. 
+
+
+# Zoom into one sector, how each month of the sector performed in 2017? 
+
+After seeing three sectors’ performance in quarters, I’m going to choose the typical sector to focus on, and visualize the monthly performance of that sectors. 
+
+* Communication services
+
+After the visualization, I will make two tests:
+
+1. Whether there is a significant difference between Q1 and Q2 `average daily gain(%)` of the communication services sector stocks
+2. Whether there is a significant difference between Q3 and Q4 `average daily gain(%)` of the communication services sector stocks
+
+* Alpha level = 0.05
+
+
+```{R}
+
+# Filter the Communication Services data
+
+Comm.month <- filter(sp500, `GICS Sector` == "Communication Services") %>% 
+  group_by(Name, month.number)  %>%
+  summarize(avg.gain = mean(`day gain%`, na.rm = TRUE))
+
+# Plot the distribution of Communication Services sector per month
+
+ggplot(Comm.month, aes(month.number, avg.gain)) +
+  geom_point(aes(y = avg.gain), color = "#6ba292", size = 0.6) + 
+  geom_hline(yintercept = mean.comm, color = "#d97132", linetype = "dashed", alpha = 0.5,)+
+  labs(x = "Month", y = "Average Day Gain(%)", title = "Communication Services Stocks Average Day Gain (%)")
+
+```
+
+
+```{r}
+
+
+# Filter data for each quarter
+
+com.Q1 <- filter(Comm.month, month.number %in% c("01","02","03"))%>% 
+  group_by(Name) %>%
+  summarize(avg.gain = mean(avg.gain, na.rm = TRUE)) %>%
+  mutate(Q = "Q1")
+
+com.Q2 <- filter(Comm.month, month.number %in% c("04","05","06"))%>% 
+  group_by(Name) %>%
+  summarize(avg.gain = mean(avg.gain, na.rm = TRUE)) %>%
+  mutate(Q = "Q2")
+
+com.Q3 <- filter(Comm.month, month.number %in% c("07","08","09"))%>% 
+  group_by(Name) %>%
+  summarize(avg.gain = mean(avg.gain, na.rm = TRUE)) %>%
+  mutate(Q = "Q3")
+
+com.Q4 <- filter(Comm.month, month.number %in% c("10","11","12"))%>% 
+  group_by(Name) %>%
+  summarize(avg.gain = mean(avg.gain, na.rm = TRUE)) %>%
+  mutate(Q = "Q4")
+
+# Group data for t-test 
+com.quarter12 <- bind_rows(com.Q1, com.Q2)
+com.quarter34 <- bind_rows(com.Q3, com.Q4)
+
+# Dependent t-test comparing Q1 and Q2
+t.test(avg.gain ~ Q, data = com.quarter12, paired = TRUE)
+
+# Dependent t-test comparing Q3 and Q4
+t.test(avg.gain ~ Q, data = com.quarter34, paired = TRUE)
+
+
+```
+
+Test 1: Q1 vs Q2
+
+The p-value is 2.674e-06. This value is way smaller than the alpha level of 0.05. Since the p-value is less than the alpha level, we reject the null hypothesis. There is a significant difference between mean Q1 and Q2 `average daily gain(%)`.
+
+Test 2: Q3 vs Q4
+
+The p-value is 0.0627. This value is greater than the alpha level of 0.05. Since the p-value is greater the alpha level, we accept the null hypothesis. There is not but almost a significant difference between mean Q3 and Q4 `average daily gain(%)`.
+
+
+# Summarize 
+
+Regarding the analysis, the overall stock market returned a 0.0214% mean for average daily gain, in conclusion, the market was positively gaining in 2017. Breaking down to each quarter: Q1 performed the best with a mean of 0.07% gaining overall; Q2 and Q3 not optimistic with a mean of -0.026% and 0.004%; Q4 got better with a mean of 0.032% in average daily gain. Regarding the sector performance, the health care sector had a higher advantage, and the energy sector didn't preform too well in 2017 especially in the first two quarters. In the communication service sector, there is a significant difference between Q1 and Q2, but not as significant between Q3 and Q4.
+
+
+### What’s next
+
+I would like to analyze the trading volume as my next step. Perhaps to see the relationship between the daily gain and the daily volume.
+
+```{r}
+
+# Grouping data by stock names and sectors to get the average volume of 2017
+
+year.500v <- 
+    sp500 %>% group_by(Name, `GICS Sector`) %>%
+    summarize(avg.vol = mean(volume, na.rm = TRUE)) %>%
+    mutate(`avg.vol(M)` = avg.vol/1000000)
+
+# Plot the distribution of S&P500 average volume in 2017
+
+ggplot(year.500v, mapping = aes(`avg.vol(M)`))+
+  geom_density(fill = "#6ba292", color = "white", alpha = 0.8)+
+  labs(x = "Mean volume", y = "Count", title = "2017 S&P500 average trading volume")
+
+# Calculating the central tendency of the average volume in 2017
+
+summary(year.500v$`avg.vol(M)`, na.rm = TRUE)
+
+# Checking the normality of the distribution
+
+skewness(year.500v$`avg.vol(M)`, na.rm = TRUE)
+kurtosis(year.500v$`avg.vol(M)`, na.rm = TRUE)
+```
+
